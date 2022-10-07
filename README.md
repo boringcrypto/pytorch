@@ -287,7 +287,7 @@ In this mode PyTorch computations will leverage your GPU via CUDA for faster num
 NVTX is a part of CUDA distributive, where it is called "Nsight Compute". To install it onto an already installed CUDA run CUDA installation once again and check the corresponding checkbox.
 Make sure that CUDA with Nsight Compute is installed after Visual Studio.
 
-Currently, VS 2017 / 2019, and Ninja are supported as the generator of CMake. If `ninja.exe` is detected in `PATH`, then Ninja will be used as the default generator, otherwise, it will use VS 2017 / 2019.
+Currently, VS 2017 / 2019 / 2022, and Ninja are supported as the generator of CMake. If `ninja.exe` is detected in `PATH`, then Ninja will be used as the default generator, otherwise, it will use VS 2017 / 2019 / 2022.
 <br/> If Ninja is selected as the generator, the latest MSVC will get selected as the underlying toolchain.
 
 Additional libraries such as
@@ -313,7 +313,7 @@ set DISTUTILS_USE_SDK=1
 for /f "usebackq tokens=*" %i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -version [15^,17^) -products * -latest -property installationPath`) do call "%i\VC\Auxiliary\Build\vcvarsall.bat" x64 -vcvars_ver=%CMAKE_GENERATOR_TOOLSET_VERSION%
 
 :: [Optional] If you want to override the CUDA host compiler
-set CUDAHOSTCXX=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.27.29110\bin\HostX64\x64\cl.exe
+set CUDAHOSTCXX=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.33.31629\bin\HostX64\x64\cl.exe
 
 python setup.py install
 

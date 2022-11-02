@@ -67,6 +67,12 @@ void cuda_device_assertions_1_var_test() {
   }
 }
 
+TEST(CUDATest, dsa_enabled_for_dsa_tests) {
+  #ifndef TORCH_USE_CUDA_DSA
+    throw std::runtime_error("DSA disabled in DSA tests!");
+  #endif
+}
+
 TEST(CUDATest, cuda_device_assertions_1_var_test) {
   cuda_device_assertions_1_var_test();
 }

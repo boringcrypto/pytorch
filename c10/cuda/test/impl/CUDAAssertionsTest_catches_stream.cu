@@ -13,7 +13,6 @@
 
 using ::testing::HasSubstr;
 
-
 /**
  * Device kernel that takes mulitple integer parameters as arguments and
  * will always trigger a device side assertion.
@@ -92,7 +91,7 @@ void cuda_device_assertions_catches_stream() {
   }
 }
 
-
 TEST(CUDATest, cuda_device_assertions_catches_stream) {
+  c10::cuda::CUDAKernelLaunchRegistry::get_singleton_ref().enabled = true;
   cuda_device_assertions_catches_stream();
 }

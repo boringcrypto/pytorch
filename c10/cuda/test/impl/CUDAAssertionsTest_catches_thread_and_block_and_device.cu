@@ -13,7 +13,6 @@
 
 using ::testing::HasSubstr;
 
-
 /**
  * Device kernel that takes 2 arguments
  * @param bad_thread represents the thread we want to trigger assertion on.
@@ -78,5 +77,6 @@ void cuda_device_assertions_catches_thread_and_block_and_device() {
 }
 
 TEST(CUDATest, cuda_device_assertions_catches_thread_and_block_and_device) {
+  c10::cuda::CUDAKernelLaunchRegistry::get_singleton_ref().enabled = true;
   cuda_device_assertions_catches_thread_and_block_and_device();
 }

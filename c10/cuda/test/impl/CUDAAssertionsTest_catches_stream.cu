@@ -92,6 +92,10 @@ void cuda_device_assertions_catches_stream() {
 }
 
 TEST(CUDATest, cuda_device_assertions_catches_stream) {
+#ifdef TORCH_USE_CUDA_DSA
   c10::cuda::CUDAKernelLaunchRegistry::get_singleton_ref().enabled = true;
   cuda_device_assertions_catches_stream();
+#else
+  GTEST_SKIP() << "CUDA device-side assertions (DSA) was not enabled.";
+#endif
 }

@@ -22,7 +22,7 @@ std::string c10_retrieve_device_side_assertion_info() {
 #ifdef TORCH_USE_CUDA_DSA
   const auto& launch_registry = CUDAKernelLaunchRegistry::get_singleton_ref();
   if (!launch_registry.enabled) {
-    return "Device-side assertion tracking was not enabled.";
+    return "Device-side assertion tracking was not enabled by user.";
   } else if (!launch_registry.do_all_devices_support_managed_memory) {
     return "Device-side assertions disabled because not all devices support managed memory.";
   }
@@ -178,7 +178,7 @@ uint32_t CUDAKernelLaunchRegistry::insert(
     const char* kernel_name,
     const int32_t stream_id) {
 #ifdef TORCH_USE_CUDA_DSA
-  if (!enabled || !do_all_devices_support_managed_memory) {
+  if (!is_enabled()) {
     return 0;
   }
 
@@ -226,7 +226,7 @@ CUDAKernelLaunchRegistry::snapshot() const {
 DeviceAssertionsData* CUDAKernelLaunchRegistry::
     get_uvm_assertions_ptr_for_current_device() {
 #ifdef TORCH_USE_CUDA_DSA
-  if (!enabled || !do_all_devices_support_managed_memory) {
+  if (!is_enabled()) {
     return nullptr;
   }
 
@@ -366,6 +366,14 @@ bool CUDAKernelLaunchRegistry::has_failed() const {
     }
   }
   return false;
+}
+
+bool CUDAKernelLaunchRegistry::is_enabled() const {
+#ifdef TORCH_USE_CUDA_DSA
+  return enabled && do_all_devices_support_managed_memory;
+else
+  return false;
+#endif
 }
 
 } // namespace cuda

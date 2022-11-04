@@ -193,7 +193,6 @@ class C10_CUDA_API CUDAKernelLaunchRegistry {
   /// rare enough that the defensive
   static int get_device_compute_capability(const int device_num);
   static bool check_if_all_devices_support_managed_memory();
-  const bool do_all_devices_support_managed_memory = false;
   static bool env_flag_set(const char* env_var_name);
   bool check_env_for_enable_launch_stacktracing() const;
   bool check_env_for_dsa_enabled() const;
@@ -224,11 +223,16 @@ class C10_CUDA_API CUDAKernelLaunchRegistry {
   int gpus_interacted_with() const;
   /// Whether or not to gather stack traces when launching kernels
   bool gather_launch_stacktrace = false;
-  /// Whether or not host-side DSA is enabled (device-side cannot be)
-  /// disabled at run-time
+  /// If not all devices support DSA, we disable it
+  const bool do_all_devices_support_managed_memory = false;
+  /// Whether or not host-side DSA is enabled or disabled at run-time
+  /// Device-side code cannot be adjusted at run-time
   bool enabled = false;
   /// Whether or not the device has indicated a failure
   bool has_failed() const;
+  /// Since multiple mechanisms can enable/disable, we add a function that
+  /// aggregates them
+  bool is_enabled() const;
 };
 
 } // namespace cuda

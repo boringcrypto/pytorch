@@ -159,8 +159,8 @@ def op_assert_ref(test_case, op, test_dtype, i, orig, decomp, ref, args, kwargs)
         (torch.bfloat16, torch.ops.aten.native_layer_norm_backward.default): 2e-2,
         (torch.bfloat16, torch.ops.aten.native_batch_norm.default): 1e-5,
         (torch.float16, torch.ops.aten.native_batch_norm.default): 1e-5,
-        (torch.bfloat16, torch.ops.aten.linalg_vector_norm.default): 1e-6,
-        (torch.float16, torch.ops.aten.linalg_vector_norm.default): 1e-6,
+        (torch.bfloat16, torch.ops.aten.linalg_vector_norm.default): 1e-5,
+        (torch.float16, torch.ops.aten.linalg_vector_norm.default): 1e-5,
         (torch.float16, torch.ops.aten.nll_loss_forward.default): 1e-2,
         (torch.bfloat16, torch.ops.aten.nll_loss_forward.default): 1e-1,
     }
@@ -293,6 +293,7 @@ CROSS_REF_EXCLUDE_SET = {
     (None, None, "meshgrid"),
     # diag was not decomposed (it just registers a decomp for diag_out, torch.diag is CompImplicit)
     (None, None, "diag"),
+    (None, None, "norm"),
 }
 
 CROSS_REF_BACKWARD_EXCLUDE_SET = {

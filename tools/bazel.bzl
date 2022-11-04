@@ -1,5 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-load("@rules_cuda//cuda:defs.bzl", "requires_cuda_enabled")
+load("@rules_cuda//cuda:defs.bzl", "requires_cuda_enabled", "cuda_library")
 load("//c10/macros:cmake_configure_file.bzl", "cmake_configure_file")
 load("//tools/config:defs.bzl", "if_cuda")
 

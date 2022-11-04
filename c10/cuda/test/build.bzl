@@ -1,5 +1,4 @@
-tests = [
-    "impl/CUDATest.cpp",
+dsa_tests = [
     "impl/CUDAAssertionsTest_1_var_test.cu",
     "impl/CUDAAssertionsTest_catches_stream.cu",
     "impl/CUDAAssertionsTest_catches_thread_and_block_and_device.cu",
@@ -9,10 +8,25 @@ tests = [
     "impl/CUDAAssertionsTest_multiple_writes_from_same_block.cu",
 ]
 
+
+
 def define_targets(rules):
+    rules.cc_test(
+        name = "test",
+        srcs = [
+            "impl/CUDATest.cpp",
+        ],
+        deps = [
+            "@com_google_googletest//:gtest_main",
+            "//c10/cuda",
+        ],
+        target_compatible_with = rules.requires_cuda_enabled(),
+    )
+
     for src in tests:
-        rules.cc_test(
-            name = "test_" + src.replace("impl/", "").replace(".cu", ""),
+        name = src.replace("impl/", "").replace(".cu", "")
+        rules.cuda_library(
+            name = f"test_{name}_lib",
             srcs = [
                 src,
             ],
@@ -21,4 +35,10 @@ def define_targets(rules):
                 "//c10/cuda",
             ],
             target_compatible_with = rules.requires_cuda_enabled(),
+        )
+        rules.cc_test(
+            name = f"test_{name}",
+            deps = [
+                f":test_{name}_lib"
+            ]
         )

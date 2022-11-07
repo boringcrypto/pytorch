@@ -2917,45 +2917,43 @@ class FallbackKernel(ExternKernelAlloc):
                 unflatten_args,
             ) = cls.process_kernel(kernel, *args, **kwargs)
 
-        if isinstance(example_output, (list, tuple)):
-            packed = FallbackKernel(
-                MultiOutputLayout(tensor_args[0].get_device()),
-                kernel,
-                tensor_args,
-                non_tensor_args,
-                unflatten_args,
-            )
-            return [
-                (
+        packed = FallbackKernel(
+            MultiOutputLayout(tensor_args[0].get_device()),
+            kernel,
+            tensor_args,
+            non_tensor_args,
+            unflatten_args,
+            kwargs,
+        )
+
+        def generate_output(output, index=""):
+            if isinstance(output, list):
+                return list(
+                    generate_output(output[i], f"{index}[{i}]")
+                    for i in range(len(output))
+                )
+            elif isinstance(output, tuple):
+                return tuple(
+                    generate_output(output[i], f"{index}[{i}]")
+                    for i in range(len(output))
+                )
+            else:
+                return (
                     MultiOutput(
                         FixedLayout(
-                            example_output[i].device,
-                            example_output[i].dtype,
-                            [sympy.Integer(s) for s in example_output[i].size()],
-                            [sympy.Integer(s) for s in example_output[i].stride()],
+                            output.device,
+                            output.dtype,
+                            [sympy.Integer(s) for s in output.size()],
+                            [sympy.Integer(s) for s in output.stride()],
                         ),
                         packed,
-                        i,
+                        index,
                     )
-                    if example_output[i] is not None
+                    if output is not None
                     else None
                 )
-                for i in range(len(example_output))
-            ]
-        else:
-            return FallbackKernel(
-                FixedLayout(
-                    example_output.device,
-                    example_output.dtype,
-                    [sympy.Integer(s) for s in example_output.size()],
-                    [sympy.Integer(s) for s in example_output.stride()],
-                ),
-                kernel,
-                tensor_args,
-                non_tensor_args,
-                unflatten_args,
-                kwargs,
-            )
+
+        return generate_output(example_output)
 
     def apply_constraint(self):
         return super().apply_constraint()
@@ -2969,11 +2967,11 @@ class MultiOutputLayout(IRNode):
 class MultiOutput(ExternKernel):
     def codegen(self, wrapper):
         wrapper.writeline(
-            f"{self.get_name()} = {self.inputs[0].get_name()}[{self.index}]"
+            f"{self.get_name()} = {self.inputs[0].get_name()}{self.index}"
         )
         self.codegen_size_asserts(wrapper)
 
-    def __init__(self, layout, input, index):
+    def __init__(self, layout, input, index: str):
         super().__init__(None, layout, [input], ())
         self.name = V.graph.register_buffer(self)
         self.index = index

@@ -4,6 +4,7 @@ import logging
 import operator
 import random
 import weakref
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -394,6 +395,186 @@ def _philox_rand_like_meta(input, seed, offset):
 def _philox_rand_like(input, seed, offset):
     # placeholder only used in tracing
     return torch.rand_like(input)
+
+
+class NormalizedLinearNode:
+    def __init__(self, node: torch.fx.Node) -> None:
+        assert node.op == "call_function"
+        assert node.target in [torch.nn.functional.linear]
+        self.node: torch.fx.Node = node
+
+    def get_input(self) -> torch.fx.Node:
+        if len(self.node.args) > 0:
+            return self.node.args[0]
+        else:
+            return self.node.kwargs["input"]
+
+    def get_weight(self) -> torch.fx.Node:
+        if len(self.node.args) > 1:
+            return self.node.args[1]
+        else:
+            return self.node.kwargs["weight"]
+
+    def get_bias(self) -> torch.fx.Node:
+        if len(self.node.args) > 2:
+            return self.node.args[2]
+        else:
+            return self.node.kwargs["bias"]
+
+
+class NormalizedMatmulNode:
+    def __init__(self, node: torch.fx.Node) -> None:
+        assert node.op == "call_function"
+        assert node.target in [torch.bmm, torch.matmul]
+        self.node: torch.fx.Node = node
+
+    def get_input(self) -> torch.fx.Node:
+        if len(self.node.args) > 0:
+            return self.node.args[0]
+        else:
+            return self.node.kwargs["input"]
+
+    def get_other(self) -> torch.fx.Node:
+        if len(self.node.args) > 1:
+            return self.node.args[1]
+        else:
+            return self.node.kwargs["other"]
+
+
+def check_permute(node: torch.fx.Node):
+    ranks = len(node.meta["tensor_meta"].shape)
+    if len(node.args) > 2:
+        permutation = [node.args[i] % ranks for i in range(1, ranks + 1)]
+    else:
+        permutation = [i % ranks for i in node.kwargs["permutation"]]
+    allowed_permutation = list(range(ranks))
+    allowed_permutation[-1] = ranks - 2
+    allowed_permutation[-2] = ranks - 1
+    return permutation == allowed_permutation
+
+
+def fxFuser(module: torch.fx.GraphModule, example_inputs: Any) -> torch.fx.GraphModule:
+    ShapeProp(module).propagate(*example_inputs)
+    module = linear_permute_fusion(module, example_inputs)
+    return module
+
+
+def linear_permute_fusion(module: torch.fx.GraphModule, example_inputs: Any) -> torch.fx.GraphModule:
+    for node in module.graph.nodes:
+        if node.op == "call_method" and node.target == "permute" and check_permute(node):
+            if len(node.args) > 0:
+                input_node = node.args[0]
+            else:
+                input_node = node.kwargs["input"]
+            if input_node.op == "call_function" and input_node.target == torch.nn.functional.linear:
+                normalized = NormalizedLinearNode(input_node)
+                input = normalized.get_input()
+                weight = normalized.get_weight()
+                bias = normalized.get_bias()
+                with module.graph.inserting_before(node):
+                    fused_node = module.graph.call_function(
+                        linear_transpose, args=(input, weight, bias)
+                    )
+                    node.replace_all_uses_with(fused_node)
+
+    module.graph.lint()
+    module.graph.eliminate_dead_code()
+    module.recompile()
+    return module
+
+
+# Y1 = X * W^T + bias
+# Y2 = Y1.permute(0, 2, 1)
+# ---->
+# Y2 = (W * X^T + bias.unsqueeze(-1))^T
+def linear_transpose(
+    input: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
+) -> torch.Tensor:
+    return torch.matmul(weight, input.transpose(-1, -2)) + bias.unsqueeze(-1)
+
+
+def permute_linear_fusion(module: torch.fx.GraphModule, example_inputs: Any) -> torch.fx.GraphModule:
+    ShapeProp(module).propagate(*example_inputs)
+    for node in module.graph.nodes:
+        if node.op == "call_function" and node.target == torch.nn.functional.linear:
+            if len(node.args) > 0:
+                input_node = node.args[0]
+            else:
+                input_node = node.kwargs["input"]
+            if input_node.op == "call_method" and input_node.target == "permute" and check_permute(input_node):
+                normalized = NormalizedLinearNode(node)
+                if len(input_node.args) > 0:
+                    input = input_node.args[0]
+                else:
+                    input = input_node.kwargs["input"]
+                weight = normalized.get_weight()
+                bias = normalized.get_bias()
+                with module.graph.inserting_before(node):
+                    fused_node = module.graph.call_function(
+                        transpose_linear, args=(input, weight, bias)
+                    )
+                    node.replace_all_uses_with(fused_node)
+
+    module.graph.lint()
+    module.graph.eliminate_dead_code()
+    module.recompile()
+    return module
+
+
+def permute_matmul_fusion(module: torch.fx.GraphModule, example_inputs: Any) -> torch.fx.GraphModule:
+    for node in module.graph.nodes:
+        print(f"node.target: {node.target}")
+        if node.op == "call_function" and (node.target == torch.bmm or node.target == torch.matmul):
+            normalized = NormalizedMatmulNode(node)
+            A = normalized.get_input()
+            B = normalized.get_other()
+            Atrans = Btrans = False
+            if A.op == "call_method" and A.target == "permute" and check_permute(A):
+                Atrans = True
+                if len(A.args) > 0:
+                    A = A.args[0]
+                else:
+                    A = A.kwargs["input"]
+
+            if B.op == "call_method" and B.target == "permute" and check_permute(B):
+                Btrans = True
+                if len(B.args) > 0:
+                    B = B.args[0]
+                else:
+                    B = B.kwargs["input"]
+
+            if (Atrans or Btrans):
+                with module.graph.inserting_before(node):
+                    fused_node = module.graph.call_function(
+                        transpose_matmul, args=(A, B, Atrans, Btrans),
+                    )
+                node.replace_all_uses_with(fused_node)
+
+
+    module.graph.lint()
+    module.graph.eliminate_dead_code()
+    module.recompile()
+    return module
+
+
+# X1 = X.permute(0, 2, 1)
+# Y1 = X1 * W1^T + bias1
+# ---->
+# Y2 = X1.transpose(-1, -2) * W1^T + bias1
+def transpose_linear(
+    input: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor
+) -> torch.Tensor:
+    return torch.matmul(input.transpose(-1, -2), weight.t()) + bias
+
+
+def transpose_matmul(
+    A: torch.Tensor, B: torch.Tensor, Atrans: bool, Btrans: bool
+):
+    if Atrans:
+        A = A.transpose(-1, -2)
+    if Btrans:
+        B = B.transpose(-1, -2)
+    return torch.matmul(A, B)
 
 
 def replace_and_fuse_for_binary(
